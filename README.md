@@ -1,18 +1,38 @@
 # FreelanceHub — Back-End (v2)
 
-منصة عمل حر عربية تجمع أصحاب المشاريع بالمستقلين، مع **محفظة وضمان مالي (Escrow)** و**عقود تُدفع على مراحل**.
-مبنية حسب وصف المشروع `FreelanceHub (2).pdf` وبأسلوب «دليل الباك إند الشامل»:
-**NestJS 11 · TypeScript · PostgreSQL 16 · Prisma 6 · Redis · BullMQ · JWT**.
+**English** · [العربية](README.ar.md)
 
-| ملف | محتواه |
+Back-end for an Arabic freelance marketplace that connects clients with freelancers, with an **escrow wallet** and **contracts paid milestone by milestone**.
+
+**NestJS 11 · TypeScript · PostgreSQL 16 · Prisma 6 · Redis · BullMQ · JWT · Docker**
+
+| File | Contents |
 |---|---|
-| [`postman/FreelanceHub.postman_collection.json`](postman/FreelanceHub.postman_collection.json) | **مجموعة Postman**: 107 طلبات بأمثلة وردود حقيقية و152 فحصاً — Import ثم Run |
+| [`postman/FreelanceHub.postman_collection.json`](postman/FreelanceHub.postman_collection.json) | **Postman collection**: 107 requests with real example responses and 152 automated checks. Import it, then Run |
+| [`assets/erd.png`](assets/erd.png) | Database diagram (ERD) |
 
 ---
 
-## التشغيل السريع (Windows)
+## Highlights
 
-المتطلبات: **Node.js 22**، **PostgreSQL 16** (منفذ 5432)، **Redis 7** (هنا عبر Docker على المنفذ 6380).
+- **Escrow wallet**: accepting a proposal holds the client's funds; each approved milestone releases its amount, split **90% freelancer / 10% platform** down to the last cent. The last milestone completes the contract and refunds whatever is left.
+- **One transaction per money move**: accepting a proposal holds funds, creates the contract and rejects the other proposals atomically, and stays correct when two requests arrive at the same moment.
+- **Sessions per device**: JWT access/refresh tokens with rotation. Reusing an old refresh token ends **every** session. Users can list their devices and sign out of one.
+- **Roles**: Client, Freelancer and Admin, with an admin dashboard, user search and instant bans.
+- **Rate limits**: login 5/minute, registration 3/hour/IP, proposals 20/day.
+- **Redis caching** with invalidation on change, a **BullMQ** email queue, and a **midnight job** that expires stale projects.
+- **File uploads** with type and size limits; contract deliverables are private to the two parties and admins.
+- **Tests**: unit tests plus **36 end-to-end tests** on real PostgreSQL and Redis.
+
+## Database
+
+![ERD](assets/erd.png)
+
+---
+
+## Quick start (Windows)
+
+Requirements: **Node.js 22**, **PostgreSQL 16** (port 5432), **Redis 7** (here through Docker on port 6380).
 
 ```bash
 npm install
@@ -21,6 +41,8 @@ npm install
 ```bash
 docker run -d --name freelancehub-redis -p 6380:6379 --restart unless-stopped redis:7-alpine
 ```
+
+Copy `.env.example` to `.env` and fill in the values, then:
 
 ```bash
 npx prisma migrate deploy
@@ -34,22 +56,22 @@ npm run seed
 npm run start:dev
 ```
 
-- الـ API: `http://localhost:3100/api`
-- **Swagger** (جرّب كل شيء من المتصفح): `http://localhost:3100/docs`
-- فحص الصحة: `GET /api/health`
+- API: `http://localhost:3100/api`
+- **Swagger** (try every endpoint from the browser): `http://localhost:3100/docs`
+- Health check: `GET /api/health`
 
-حسابات تجريبية (كلمة السر لكلها `Passw0rd!`):
+Demo accounts (password for all: `Passw0rd!`):
 
-| الحساب | الدور | الحالة |
+| Account | Role | State |
 |---|---|---|
-| `sara@demo.local` | صاحبة مشروع | رصيدها 600$، لها مشروع عليه 3 عروض جاهزة للقبول |
-| `omar@demo.local` | صاحب مشروع | 5 مشاريع مفتوحة، عقد مكتمل سابق |
-| `ahmed@demo.local` | مستقل | Flutter |
-| `layla@demo.local` | مستقلة | تقييم 5★، مشروع منجز، أرباح 180$ |
-| `khaled@demo.local` | مستقل | Back-End |
-| `admin@freelancehub.local` | مدير | كلمة السر من `ADMIN_PASSWORD` في `.env` |
+| `sara@demo.local` | Client | $600 balance, one project with 3 proposals ready to accept |
+| `omar@demo.local` | Client | 5 open projects, one completed contract |
+| `ahmed@demo.local` | Freelancer | Flutter |
+| `layla@demo.local` | Freelancer | 5★ rating, one finished project, $180 earned |
+| `khaled@demo.local` | Freelancer | Back-End |
+| `admin@freelancehub.local` | Admin | Password comes from `ADMIN_PASSWORD` in `.env` |
 
-## الاختبارات
+## Tests
 
 ```bash
 npm test
@@ -59,91 +81,91 @@ npm test
 npm run test:e2e
 ```
 
-- `npm test`: اختبارات الوحدة (حساب 90/10 حتى آخر سنت، متوسط التقييم).
-- `npm run test:e2e`: **36 اختباراً** على PostgreSQL وRedis حقيقيين، على قاعدة منفصلة (`TEST_DATABASE_URL`). تغطي قصة سارة وأحمد كاملة بالأرقام، والتزامن (ضغطتان معاً)، والجلسات، والحدود، ومهمة منتصف الليل، والبريد في الطابور.
+- `npm test`: unit tests (the 90/10 split to the last cent, rating averages).
+- `npm run test:e2e`: **36 tests** on real PostgreSQL and Redis, using a separate database (`TEST_DATABASE_URL`). They cover the full client–freelancer story with exact amounts, concurrency (two clicks at once), sessions, limits, the midnight job and the email queue.
 
-## النشر بـ Docker
+## Run with Docker
 
 ```bash
 docker compose up -d --build
 ```
 
-يشغّل `api` + `db` (PostgreSQL) + `redis` مع volumes، ويطبّق الـ migrations عند الإقلاع. ضع `DB_PASSWORD` وباقي الأسرار في `.env`.
+Starts `api` + `db` (PostgreSQL) + `redis` with volumes, and applies migrations on startup. Put `DB_PASSWORD` and the other secrets in `.env`.
 
 ---
 
-## الـ Endpoints
+## Endpoints
 
-🔓 = عام. الباقي يحتاج `Authorization: Bearer <accessToken>`. كل المسارات تبدأ بـ `/api`.
+🔓 = public. Everything else needs `Authorization: Bearer <accessToken>`. All paths start with `/api`.
 
-### الحسابات والأجهزة
-| | Endpoint | من | ملاحظات |
+### Accounts and devices
+| | Endpoint | Who | Notes |
 |---|---|---|---|
-| 🔓 | `POST /auth/register` | – | `role`: `CLIENT` أو `FREELANCER` — **3 حسابات/ساعة/IP** |
-| 🔓 | `POST /auth/login` | – | **5 محاولات/دقيقة** |
-| 🔓 | `POST /auth/refresh` | – | تدوير؛ إعادة استخدام مفتاح قديم ← **إنهاء كل الجلسات** |
-| | `GET /auth/sessions` | أي | أجهزتي: الجهاز، IP، وقت الدخول، `current` |
-| | `DELETE /auth/sessions/:id` | أي | الخروج من جهاز معيّن |
-| | `POST /auth/logout`, `POST /auth/logout-all` | أي | |
-| | `GET /users/me` | أي | |
+| 🔓 | `POST /auth/register` | – | `role`: `CLIENT` or `FREELANCER`, **3 accounts/hour/IP** |
+| 🔓 | `POST /auth/login` | – | **5 attempts/minute** |
+| 🔓 | `POST /auth/refresh` | – | Rotation; reusing an old token → **all sessions end** |
+| | `GET /auth/sessions` | any | My devices: device, IP, sign-in time, `current` |
+| | `DELETE /auth/sessions/:id` | any | Sign out of one device |
+| | `POST /auth/logout`, `POST /auth/logout-all` | any | |
+| | `GET /users/me` | any | |
 
-### الملف الشخصي والمهارات والتصنيفات
-| | Endpoint | من | |
+### Profiles, skills and categories
+| | Endpoint | Who | |
 |---|---|---|---|
-| 🔓 | `GET /freelancers/:id` | – | تقييم، مشاريع منجزة، آخر التقييمات، مهارات (مخزّن مؤقتاً) |
+| 🔓 | `GET /freelancers/:id` | – | Rating, completed projects, latest reviews, skills (cached) |
 | | `GET/PATCH /freelancers/me/profile` | FREELANCER | `title, bio, hourlyRate, skillIds[]` |
 | | `PUT /freelancers/me/avatar` | FREELANCER | `file`: jpg/png/webp ≤ 2MB |
 | | `PUT /freelancers/me/cv` | FREELANCER | `file`: PDF ≤ 5MB |
-| 🔓 | `GET /skills`, `GET /categories` | – | مخزّنة مؤقتاً، تُبطَل عند التعديل |
-| | `POST/PATCH/DELETE /skills`, `/categories` | ADMIN | لا يُحذف تصنيف عليه مشاريع |
+| 🔓 | `GET /skills`, `GET /categories` | – | Cached, invalidated on change |
+| | `POST/PATCH/DELETE /skills`, `/categories` | ADMIN | A category with projects can't be deleted |
 | 🔓 | `GET /users/:id/reviews` | – | |
 
-### المشاريع والعروض
-| | Endpoint | من | |
+### Projects and proposals
+| | Endpoint | Who | |
 |---|---|---|---|
 | 🔓 | `GET /projects` | – | `page, limit, categoryId, status, budgetMin, budgetMax, search, sortBy=createdAt\|budget, order` |
 | 🔓 | `GET /projects/:id` | – | |
 | | `GET /projects/mine` | CLIENT/FREELANCER | |
-| | `POST /projects` | CLIENT | multipart: `title, description, categoryId, budgetMin, budgetMax, deadline` + حتى 5 `attachments` |
-| | `PATCH /projects/:id` | المالك | وهو `OPEN` فقط (يمكن إضافة مرفقات) |
-| | `DELETE /projects/:id/attachments/:attId` | المالك | |
-| | `POST /projects/:id/cancel` | المالك | وهو `OPEN` فقط |
-| | `DELETE /projects/:id` | المالك | **حذف ناعم** |
-| | `POST /projects/:id/proposals` | FREELANCER | `price, durationDays, message` — **20/يوم** |
-| | `GET /projects/:id/proposals` | المالك | `sortBy=price\|createdAt, order, status` |
+| | `POST /projects` | CLIENT | multipart: `title, description, categoryId, budgetMin, budgetMax, deadline` + up to 5 `attachments` |
+| | `PATCH /projects/:id` | owner | Only while `OPEN` (attachments can be added) |
+| | `DELETE /projects/:id/attachments/:attId` | owner | |
+| | `POST /projects/:id/cancel` | owner | Only while `OPEN` |
+| | `DELETE /projects/:id` | owner | **Soft delete** |
+| | `POST /projects/:id/proposals` | FREELANCER | `price, durationDays, message`, **20/day** |
+| | `GET /projects/:id/proposals` | owner | `sortBy=price\|createdAt, order, status` |
 | | `GET /proposals/mine` | FREELANCER | `status=PENDING\|ACCEPTED\|REJECTED\|WITHDRAWN` |
-| | `PATCH /proposals/:id`, `POST /proposals/:id/withdraw` | صاحبه | وهو `PENDING` |
-| | `POST /proposals/:id/accept` | مالك المشروع | حجز + عقد + رفض الباقي (معاملة واحدة) |
+| | `PATCH /proposals/:id`, `POST /proposals/:id/withdraw` | author | While `PENDING` |
+| | `POST /proposals/:id/accept` | project owner | Hold funds + create contract + reject the rest (one transaction) |
 
-### العقود والمراحل
-| | Endpoint | من | |
+### Contracts and milestones
+| | Endpoint | Who | |
 |---|---|---|---|
-| | `GET /contracts`, `GET /contracts/:id` | الطرفان (+المدير) | |
-| | `POST /contracts/:id/milestones` | العميل | `title, amount` — المجموع ≤ قيمة العقد |
-| | `PATCH/DELETE /milestones/:id` | العميل | ما دامت لم تُسلَّم |
-| | `POST /milestones/:id/submissions` | المستقل | multipart: `note` + حتى 5 `files` (PDF/ZIP ≤ 10MB) |
-| | `GET /milestones/:id/submissions` | الطرفان + المدير | تاريخ التسليمات |
-| | `GET /submission-files/:id/download` | الطرفان + المدير | ملفات خاصة |
-| | `POST /milestones/:id/approve` | العميل | 90% مستقل / 10% منصة؛ آخر مرحلة تُكمل العقد وتعيد المتبقي |
-| | `POST /milestones/:id/request-revision` | العميل | `note` |
-| | `POST /contracts/:id/reviews` | الطرفان | بعد الاكتمال، مرة واحدة: `rating 1..5, comment` |
+| | `GET /contracts`, `GET /contracts/:id` | both parties (+admin) | |
+| | `POST /contracts/:id/milestones` | client | `title, amount`; total ≤ contract amount |
+| | `PATCH/DELETE /milestones/:id` | client | While not yet submitted |
+| | `POST /milestones/:id/submissions` | freelancer | multipart: `note` + up to 5 `files` (PDF/ZIP ≤ 10MB) |
+| | `GET /milestones/:id/submissions` | both parties + admin | Submission history |
+| | `GET /submission-files/:id/download` | both parties + admin | Private files |
+| | `POST /milestones/:id/approve` | client | 90% freelancer / 10% platform; the last milestone completes the contract and refunds the remainder |
+| | `POST /milestones/:id/request-revision` | client | `note` |
+| | `POST /contracts/:id/reviews` | both parties | After completion, once: `rating 1..5, comment` |
 
-### المحفظة والإشعارات والمدير
-| | Endpoint | من | |
+### Wallet, notifications and admin
+| | Endpoint | Who | |
 |---|---|---|---|
-| | `GET /wallet` | أي | `balance` (متاح) و`heldBalance` (محجوز) |
+| | `GET /wallet` | any | `balance` (available) and `heldBalance` (in escrow) |
 | | `POST /wallet/deposit` | CLIENT | `{ amount }` |
-| | `POST /wallet/withdraw` | FREELANCER/CLIENT | من المتاح فقط |
-| | `GET /wallet/transactions` | أي | `type, from, to, page, limit` |
-| | `GET /notifications` | أي | `unreadOnly=true` |
-| | `GET /notifications/unread-count` | أي | |
-| | `PATCH /notifications/:id/read`, `PATCH /notifications/read-all` | أي | |
-| | `GET /admin/dashboard` | ADMIN | مخزّن 5 دقائق |
+| | `POST /wallet/withdraw` | FREELANCER/CLIENT | From the available balance only |
+| | `GET /wallet/transactions` | any | `type, from, to, page, limit` |
+| | `GET /notifications` | any | `unreadOnly=true` |
+| | `GET /notifications/unread-count` | any | |
+| | `PATCH /notifications/:id/read`, `PATCH /notifications/read-all` | any | |
+| | `GET /admin/dashboard` | ADMIN | Cached for 5 minutes |
 | | `GET /admin/users` | ADMIN | `search, role, banned` |
-| | `POST /admin/users/:id/ban`, `/unban` | ADMIN | فوري |
-| | `POST /admin/jobs/expire-projects` | ADMIN | تشغيل مهمة منتصف الليل الآن |
+| | `POST /admin/users/:id/ban`, `/unban` | ADMIN | Immediate |
+| | `POST /admin/jobs/expire-projects` | ADMIN | Run the midnight job now |
 
-### شكل الردود
-- القوائم: `{ "data": [...], "meta": { "total", "page", "limit", "totalPages" } }` (`limit` ≤ 100).
-- الأخطاء: `{ "statusCode", "error", "message", "path", "timestamp" }` — `message` نص، أو مصفوفة لأخطاء التحقق.
-- المبالغ نصوص عشرية دقيقة (`"500"`, `"108.45"`).
+### Response shapes
+- Lists: `{ "data": [...], "meta": { "total", "page", "limit", "totalPages" } }` (`limit` ≤ 100).
+- Errors: `{ "statusCode", "error", "message", "path", "timestamp" }`. `message` is a string, or an array for validation errors.
+- Amounts are exact decimal strings (`"500"`, `"108.45"`).
