@@ -6,10 +6,6 @@
 
 | ملف | محتواه |
 |---|---|
-| [`docs/ANALYSIS.md`](docs/ANALYSIS.md) | تحليل المتطلبات، حالات الاستخدام، آلات الحالة، «ماذا لو؟»، القرارات وأسبابها |
-| [`docs/use-case.png`](docs/use-case.png) | مخطط حالات الاستخدام |
-| [`docs/erd.png`](docs/erd.png) | مخطط قاعدة البيانات (ERD) |
-| [`docs/PROJECT-EXPLAINED.md`](docs/PROJECT-EXPLAINED.md) | **الشرح المفصّل من الصفر** + كيف تشغّل المشروع وتجربه |
 | [`postman/FreelanceHub.postman_collection.json`](postman/FreelanceHub.postman_collection.json) | **مجموعة Postman**: 107 طلبات بأمثلة وردود حقيقية و152 فحصاً — Import ثم Run |
 
 ---
