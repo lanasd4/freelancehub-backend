@@ -1,0 +1,52 @@
+# Production-like stack: API + PostgreSQL + Redis.
+#   docker compose up -d --build
+# The API is reachable only from this machine (put Nginx + SSL in front of it).
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@db:5432/freelancehub?schema=public
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: freelancehub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  # cache + queues (emails, midnight job). appendonly: queued jobs survive a restart
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:

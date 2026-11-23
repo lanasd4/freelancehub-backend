@@ -1,0 +1,512 @@
+newman
+
+FreelanceHub API — full demo
+
+□ 0. Health
+└ Health check
+  GET http://localhost:3100/api/health [200 OK, 904B, 45ms]
+  √  HTTP 200
+  √  status ok
+
+□ 1. Accounts & devices
+└ Login as admin
+  POST http://localhost:3100/api/auth/login [200 OK, 1.57kB, 131ms]
+  √  HTTP 200
+  √  returns access + refresh tokens, never the password
+
+└ Login as sara
+  POST http://localhost:3100/api/auth/login [200 OK, 1.55kB, 115ms]
+  √  HTTP 200
+  √  returns access + refresh tokens, never the password
+
+└ Login as ahmed
+  POST http://localhost:3100/api/auth/login [200 OK, 1.56kB, 115ms]
+  √  HTTP 200
+  √  returns access + refresh tokens, never the password
+
+└ Login as layla
+  POST http://localhost:3100/api/auth/login [200 OK, 1.56kB, 118ms]
+  √  HTTP 200
+  √  returns access + refresh tokens, never the password
+
+└ Login as khaled
+  POST http://localhost:3100/api/auth/login [200 OK, 1.57kB, 111ms]
+  √  HTTP 200
+  √  returns access + refresh tokens, never the password
+
+└ Register a new freelancer
+  POST http://localhost:3100/api/auth/register [201 Created, 1.58kB, 116ms]
+  √  HTTP 201 or 429
+  √  user + tokens (or 429 after 3/hour)
+
+└ Register as ADMIN is refused (400)
+  POST http://localhost:3100/api/auth/register [429 Too Many Requests, 1.09kB, 5ms]
+  √  HTTP 400 or 429
+
+└ Me (current user)
+  GET http://localhost:3100/api/users/me [200 OK, 1.12kB, 11ms]
+  √  HTTP 200
+  √  Sara is a CLIENT
+
+└ My devices (sessions)
+  GET http://localhost:3100/api/auth/sessions [200 OK, 1.2kB, 16ms]
+  √  HTTP 200
+  √  one session is the current device
+
+└ Log out ONE other device
+  DELETE http://localhost:3100/api/auth/sessions/00000000-0000-0000-0000-000000000000 [404 Not Found, 1.14kB, 8ms]
+  √  HTTP 204 or 404
+
+□ 2. Public browsing
+└ Categories (cached)
+  GET http://localhost:3100/api/categories [200 OK, 1.29kB, 8ms]
+  √  HTTP 200
+  √  has categories
+
+└ Skills (cached)
+  GET http://localhost:3100/api/skills [200 OK, 1.4kB, 7ms]
+  √  HTTP 200
+
+└ Browse projects: filter + sort + paginate
+  GET http://localhost:3100/api/projects?status=OPEN&categoryId=5&budgetMin=300&budgetMax=800&sortBy=budget&order=desc&page=1&limit=5 [200 OK, 1.89kB, 21ms]
+  √  HTTP 200
+  √  paginated shape
+
+└ Search inside title or description
+  GET http://localhost:3100/api/projects?search=تطبيق [200 OK, 1.9kB, 18ms]
+  √  HTTP 200
+  √  found something
+
+└ Freelancer public profile (Layla)
+  GET http://localhost:3100/api/freelancers/5 [200 OK, 1.55kB, 20ms]
+  √  HTTP 200
+  √  rating + completed + latest reviews
+
+└ Reviews a user received
+  GET http://localhost:3100/api/users/5/reviews [200 OK, 1.24kB, 9ms]
+  √  HTTP 200
+
+└ Unknown project → 404 (error shape)
+  GET http://localhost:3100/api/projects/999999999 [404 Not Found, 1.11kB, 7ms]
+  √  HTTP 404
+  √  uniform error shape
+
+□ 3. Freelancer profile
+└ Update profile + skills
+  PATCH http://localhost:3100/api/freelancers/me/profile [200 OK, 1.62kB, 22ms]
+  √  HTTP 200
+  √  skills saved
+
+└ Upload avatar (image ≤ 2MB)
+  PUT http://localhost:3100/api/freelancers/me/avatar (node:167820) [DEP0044] DeprecationWarning: The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[200 OK, 1.04kB, 21ms]
+  √  HTTP 200
+  √  public URL
+
+└ Upload CV (PDF ≤ 5MB)
+  PUT http://localhost:3100/api/freelancers/me/cv [200 OK, 1.03kB, 21ms]
+  √  HTTP 200
+  √  public URL
+
+└ CV must be a PDF → 400
+  PUT http://localhost:3100/api/freelancers/me/cv [400 Bad Request, 1.16kB, 8ms]
+  √  HTTP 400
+
+└ A client cannot edit a freelancer profile → 403
+  PATCH http://localhost:3100/api/freelancers/me/profile [403 Forbidden, 1.13kB, 7ms]
+  √  HTTP 403
+
+□ 4. Sara publishes a project
+└ Top up wallet ($600)
+  POST http://localhost:3100/api/wallet/deposit [200 OK, 1.01kB, 11ms]
+  √  HTTP 200
+
+└ Wallet before accepting
+  GET http://localhost:3100/api/wallet [200 OK, 1.01kB, 8ms]
+  √  HTTP 200
+  √  balance ≥ 600
+
+└ Publish project (multipart + attachment)
+  POST http://localhost:3100/api/projects [201 Created, 1.56kB, 35ms]
+  √  HTTP 201
+  √  OPEN with 1 attachment
+
+└ Validation: budgetMin > budgetMax → 400
+  POST http://localhost:3100/api/projects [400 Bad Request, 1.13kB, 9ms]
+  √  HTTP 400
+
+└ A freelancer cannot publish → 403
+  POST http://localhost:3100/api/projects [403 Forbidden, 1.11kB, 8ms]
+  √  HTTP 403
+
+└ Project details (public)
+  GET http://localhost:3100/api/projects/11 [200 OK, 1.57kB, 12ms]
+  √  HTTP 200
+
+□ 5. Proposals
+└ Ahmed bids $500 / 20 days
+  POST http://localhost:3100/api/projects/11/proposals [201 Created, 1.24kB, 34ms]
+  √  HTTP 201
+
+└ Ahmed bids again → 409 (one per project)
+  POST http://localhost:3100/api/projects/11/proposals [409 Conflict, 1.14kB, 13ms]
+  √  HTTP 409
+
+└ Layla bids $450 / 25 days
+  POST http://localhost:3100/api/projects/11/proposals [201 Created, 1.22kB, 36ms]
+  √  HTTP 201
+
+└ Khaled bids $550 / 15 days
+  POST http://localhost:3100/api/projects/11/proposals [201 Created, 1.21kB, 25ms]
+  √  HTTP 201
+
+└ The owner cannot bid on her project → 403
+  POST http://localhost:3100/api/projects/11/proposals [403 Forbidden, 1.12kB, 7ms]
+  √  HTTP 403
+
+└ Layla edits her pending proposal
+  PATCH http://localhost:3100/api/proposals/13 [200 OK, 1.22kB, 13ms]
+  √  HTTP 200
+  √  price updated
+
+└ Khaled cannot edit Layla’s proposal → 403
+  PATCH http://localhost:3100/api/proposals/13 [403 Forbidden, 1.11kB, 9ms]
+  √  HTTP 403
+
+└ Sara: unread notifications count
+  GET http://localhost:3100/api/notifications/unread-count [200 OK, 975B, 10ms]
+  √  HTTP 200
+  √  notified for every proposal
+
+└ Sara compares proposals (by price, with ratings)
+  GET http://localhost:3100/api/projects/11/proposals?sortBy=price&order=asc [200 OK, 2.41kB, 13ms]
+  √  HTTP 200
+  √  3 proposals, cheapest first, rating shown
+
+└ Only the owner sees them → 403
+  GET http://localhost:3100/api/projects/11/proposals [403 Forbidden, 1.12kB, 13ms]
+  √  HTTP 403
+
+└ Ahmed: my proposals
+  GET http://localhost:3100/api/proposals/mine?status=PENDING [200 OK, 1.83kB, 11ms]
+  √  HTTP 200
+
+□ 6. Accept → escrow + contract
+└ Sara accepts Ahmed
+  POST http://localhost:3100/api/proposals/11/accept [200 OK, 1.06kB, 46ms]
+  √  HTTP 200
+  √  contract + IN_PROGRESS
+  √  answers fast (emails are in the background)
+
+└ Accept a second proposal → 409
+  POST http://localhost:3100/api/proposals/13/accept [409 Conflict, 1.13kB, 9ms]
+  √  HTTP 409
+
+└ Sara’s wallet: $500 moved to held
+  GET http://localhost:3100/api/wallet [200 OK, 1.01kB, 6ms]
+  √  HTTP 200
+  √  held +500, available −500
+
+└ Layla: her proposal is REJECTED
+  GET http://localhost:3100/api/proposals/mine [200 OK, 2.54kB, 12ms]
+  √  HTTP 200
+  √  rejected
+
+└ The project can no longer be edited → 409
+  PATCH http://localhost:3100/api/projects/11 [409 Conflict, 1.12kB, 9ms]
+  √  HTTP 409
+
+└ Ahmed: notifications (accepted)
+  GET http://localhost:3100/api/notifications?unreadOnly=true [200 OK, 1.35kB, 9ms]
+  √  HTTP 200
+  √  PROPOSAL_ACCEPTED
+
+□ 7. Milestones, delivery, payment
+└ Wallets before payments (Ahmed)
+  GET http://localhost:3100/api/wallet [200 OK, 1kB, 7ms]
+  √  HTTP 200
+
+└ Add milestone 1: تصميم الواجهات ($100)
+  POST http://localhost:3100/api/contracts/3/milestones [201 Created, 1.17kB, 19ms]
+  √  HTTP 201
+
+└ Add milestone 2: برمجة الواجهات وربطها ($250)
+  POST http://localhost:3100/api/contracts/3/milestones [201 Created, 1.19kB, 13ms]
+  √  HTTP 201
+
+└ Add milestone 3: الاختبار والنشر على المتجر ($150)
+  POST http://localhost:3100/api/contracts/3/milestones [201 Created, 1.2kB, 13ms]
+  √  HTTP 201
+
+└ Exceeding the contract amount → 400
+  POST http://localhost:3100/api/contracts/3/milestones [400 Bad Request, 1.15kB, 11ms]
+  √  HTTP 400
+
+└ Contract details (milestones)
+  GET http://localhost:3100/api/contracts/3 [200 OK, 2.06kB, 11ms]
+  √  HTTP 200
+  √  3 milestones, nothing unallocated
+
+└ Ahmed delivers milestone 1 (ZIP + note)
+  POST http://localhost:3100/api/milestones/6/submissions [201 Created, 1.15kB, 31ms]
+  √  HTTP 201
+
+└ Sara asks for a revision
+  POST http://localhost:3100/api/milestones/6/request-revision [200 OK, 1kB, 16ms]
+  √  HTTP 200
+  √  REVISION_REQUESTED
+
+└ Ahmed re-delivers milestone 1
+  POST http://localhost:3100/api/milestones/6/submissions [201 Created, 1.2kB, 25ms]
+  √  HTTP 201
+
+└ Submissions history
+  GET http://localhost:3100/api/milestones/6/submissions [200 OK, 1.47kB, 9ms]
+  √  HTTP 200
+  √  2 deliveries kept
+
+└ Download a delivery file (party)
+  GET http://localhost:3100/api/submission-files/7/download [200 OK, 994B, 11ms]
+  √  HTTP 200
+  √  downloaded as attachment
+
+└ A stranger cannot download it → 403
+  GET http://localhost:3100/api/submission-files/7/download [403 Forbidden, 1.14kB, 10ms]
+  √  HTTP 403
+
+└ Approve milestone 1 → Ahmed +$90, platform +$10
+  POST http://localhost:3100/api/milestones/6/approve [200 OK, 1.08kB, 31ms]
+  √  HTTP 200
+  √  90 / 10
+
+└ Approve again (double click) → 409, paid once
+  POST http://localhost:3100/api/milestones/6/approve [409 Conflict, 1.16kB, 10ms]
+  √  HTTP 409
+
+└ Ahmed delivers milestone 2
+  POST http://localhost:3100/api/milestones/7/submissions [201 Created, 1.13kB, 21ms]
+  √  HTTP 201
+
+└ Approve milestone 2
+  POST http://localhost:3100/api/milestones/7/approve [200 OK, 1.08kB, 26ms]
+  √  HTTP 200
+  √  225 / 25
+
+└ Ahmed delivers milestone 3
+  POST http://localhost:3100/api/milestones/8/submissions [201 Created, 1.13kB, 21ms]
+  √  HTTP 201
+
+└ Approve milestone 3 → contract COMPLETED
+  POST http://localhost:3100/api/milestones/8/approve [200 OK, 1.08kB, 34ms]
+  √  HTTP 200
+  √  completed
+
+└ Ahmed’s wallet: +$450
+  GET http://localhost:3100/api/wallet [200 OK, 1.01kB, 6ms]
+  √  HTTP 200
+  √  +450
+
+└ Ahmed’s history: payments only
+  GET http://localhost:3100/api/wallet/transactions?type=PAYMENT&limit=3 [200 OK, 1.4kB, 10ms]
+  √  HTTP 200
+  √  135, 225, 90
+
+└ Project is COMPLETED
+  GET http://localhost:3100/api/projects/11 [200 OK, 1.6kB, 8ms]
+  √  HTTP 200
+  √  COMPLETED
+
+□ 8. Reviews
+└ Sara rates Ahmed 5★
+  POST http://localhost:3100/api/contracts/3/reviews [201 Created, 1.14kB, 16ms]
+  √  HTTP 201
+
+└ Sara rates again → 409
+  POST http://localhost:3100/api/contracts/3/reviews [409 Conflict, 1.13kB, 13ms]
+  √  HTTP 409
+
+└ Ahmed rates Sara 5★
+  POST http://localhost:3100/api/contracts/3/reviews [201 Created, 1.13kB, 13ms]
+  √  HTTP 201
+
+└ A stranger cannot review → 403
+  POST http://localhost:3100/api/contracts/3/reviews [403 Forbidden, 1.15kB, 8ms]
+  √  HTTP 403
+
+└ Ahmed’s profile now shows the rating
+  GET http://localhost:3100/api/freelancers/4 [200 OK, 1.78kB, 19ms]
+  √  HTTP 200
+  √  rated + completed
+
+□ 9. Withdraw
+└ Ahmed withdraws everything
+  POST http://localhost:3100/api/wallet/withdraw [200 OK, 1kB, 32ms]
+  √  HTTP 200
+  √  balance 0
+
+└ Withdraw more than available → 402
+  POST http://localhost:3100/api/wallet/withdraw [402 Payment Required, 1.14kB, 11ms]
+  √  HTTP 402
+
+└ History filtered by type and dates
+  GET http://localhost:3100/api/wallet/transactions?type=WITHDRAWAL&from=2026-01-01&to=2030-12-31 [200 OK, 1.3kB, 11ms]
+  √  HTTP 200
+
+□ 10. Notifications
+└ List
+  GET http://localhost:3100/api/notifications?page=1&limit=5 [200 OK, 2.53kB, 9ms]
+  √  HTTP 200
+
+└ Mark one as read
+  PATCH http://localhost:3100/api/notifications/41/read [200 OK, 985B, 25ms]
+  √  HTTP 200
+
+└ Someone else’s notification → 404
+  PATCH http://localhost:3100/api/notifications/41/read [404 Not Found, 1.12kB, 7ms]
+  √  HTTP 404
+
+└ Mark all as read
+  PATCH http://localhost:3100/api/notifications/read-all [200 OK, 976B, 25ms]
+  √  HTTP 200
+
+└ Unread count = 0
+  GET http://localhost:3100/api/notifications/unread-count [200 OK, 974B, 7ms]
+  √  HTTP 200
+  √  zero
+
+□ 11. Project lifecycle: cancel & soft delete
+└ Publish another project
+  POST http://localhost:3100/api/projects [201 Created, 1.32kB, 25ms]
+  √  HTTP 201
+
+└ Khaled bids on it
+  POST http://localhost:3100/api/projects/12/proposals [201 Created, 1.2kB, 15ms]
+  √  HTTP 201
+
+└ Someone else cannot delete it → 403
+  DELETE http://localhost:3100/api/projects/12 [403 Forbidden, 1.11kB, 7ms]
+  √  HTTP 403
+
+└ Sara deletes it (soft delete)
+  DELETE http://localhost:3100/api/projects/12 [204 No Content, 863B, 19ms]
+  √  HTTP 204
+
+└ Gone from the platform → 404
+  GET http://localhost:3100/api/projects/12 [404 Not Found, 1.11kB, 6ms]
+  √  HTTP 404
+
+└ Khaled’s proposal became REJECTED
+  GET http://localhost:3100/api/proposals/mine?status=REJECTED [200 OK, 2.83kB, 11ms]
+  √  HTTP 200
+  √  rejected
+
+└ My projects (Sara)
+  GET http://localhost:3100/api/projects/mine [200 OK, 2.8kB, 13ms]
+  √  HTTP 200
+
+└ My contracts (Ahmed)
+  GET http://localhost:3100/api/contracts?status=COMPLETED [200 OK, 1.82kB, 13ms]
+  √  HTTP 200
+
+□ 12. Admin
+└ Dashboard
+  GET http://localhost:3100/api/admin/dashboard [200 OK, 1.85kB, 11ms]
+  √  HTTP 200
+  √  all sections
+
+└ Only admins → 403
+  GET http://localhost:3100/api/admin/dashboard [403 Forbidden, 1.12kB, 6ms]
+  √  HTTP 403
+
+└ Create category
+  POST http://localhost:3100/api/categories [201 Created, 1.02kB, 23ms]
+  √  HTTP 201
+
+└ Rename category (everyone sees it at once)
+  PATCH http://localhost:3100/api/categories/11 [200 OK, 1.02kB, 26ms]
+  √  HTTP 200
+
+└ Delete category
+  DELETE http://localhost:3100/api/categories/11 [204 No Content, 863B, 10ms]
+  √  HTTP 204
+
+└ Category with projects cannot be deleted → 409
+  DELETE http://localhost:3100/api/categories/5 [409 Conflict, 1.12kB, 7ms]
+  √  HTTP 409
+
+└ Create skill
+  POST http://localhost:3100/api/skills [201 Created, 1.01kB, 27ms]
+  √  HTTP 201
+
+└ Delete skill
+  DELETE http://localhost:3100/api/skills/16 [204 No Content, 863B, 30ms]
+  √  HTTP 204
+
+└ Search users
+  GET http://localhost:3100/api/admin/users?search=layla&role=FREELANCER [200 OK, 1.19kB, 11ms]
+  √  HTTP 200
+
+└ Ban Layla
+  POST http://localhost:3100/api/admin/users/5/ban [201 Created, 1.13kB, 14ms]
+  √  HTTP 201
+  √  banned
+
+└ Layla is stopped IMMEDIATELY → 401
+  GET http://localhost:3100/api/users/me [401 Unauthorized, 1.1kB, 6ms]
+  √  HTTP 401
+
+└ Unban Layla
+  POST http://localhost:3100/api/admin/users/5/unban [201 Created, 1.13kB, 36ms]
+  √  HTTP 201
+
+└ Run the midnight job now
+  POST http://localhost:3100/api/admin/jobs/expire-projects [202 Accepted, 997B, 11ms]
+  √  HTTP 202
+
+□ 13. Security demos (run last)
+└ Refresh tokens (rotation)
+  POST http://localhost:3100/api/auth/refresh [200 OK, 1.49kB, 16ms]
+  √  HTTP 200
+  √  new pair
+
+└ Reuse the OLD refresh token → all sessions ended
+  POST http://localhost:3100/api/auth/refresh [401 Unauthorized, 1.17kB, 9ms]
+  √  HTTP 401
+  √  reuse detected
+
+└ Even the newest token is dead now → 401
+  POST http://localhost:3100/api/auth/refresh [401 Unauthorized, 1.11kB, 7ms]
+  √  HTTP 401
+
+└ Wrong password (5 tries/minute, then 429)
+  POST http://localhost:3100/api/auth/login [429 Too Many Requests, 1.08kB, 3ms]
+  √  HTTP 401 or 429
+
+└ Logout (current device)
+  POST http://localhost:3100/api/auth/logout [204 No Content, 863B, 7ms]
+  √  HTTP 204
+
+└ Logged-out token is refused → 401
+  GET http://localhost:3100/api/users/me [401 Unauthorized, 1.1kB, 6ms]
+  √  HTTP 401
+
+┌─────────────────────────┬───────────────────┬──────────────────┐
+│                         │          executed │           failed │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│              iterations │                 1 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│                requests │               107 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│            test-scripts │               107 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│      prerequest-scripts │                 2 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│              assertions │               152 │                0 │
+├─────────────────────────┴───────────────────┴──────────────────┤
+│ total run duration: 10.8s                                      │
+├────────────────────────────────────────────────────────────────┤
+│ total data received: 34.39kB (approx)                          │
+├────────────────────────────────────────────────────────────────┤
+│ average response time: 20ms [min: 3ms, max: 131ms, s.d.: 25ms] │
+└────────────────────────────────────────────────────────────────┘

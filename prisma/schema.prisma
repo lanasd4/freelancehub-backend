@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── enums ───────────────────────────
+
+enum Role {
+  CLIENT
+  FREELANCER
+  ADMIN
+}
+
+enum ProjectStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum MilestoneStatus {
+  PENDING // waiting for work
+  SUBMITTED // delivered, waiting for the client
+  REVISION_REQUESTED // client asked for changes; back to the freelancer
+  APPROVED // paid
+}
+
+/// Amounts in the ledger are always positive; the type tells the direction.
+enum TransactionType {
+  DEPOSIT // client tops up: available +
+  WITHDRAWAL // available -
+  ESCROW_HOLD // client: available -, held +
+  ESCROW_RELEASE // client: held - (paid out for a milestone)
+  PAYMENT // freelancer: available + (90%)
+  COMMISSION // platform: available + (10%)
+  REFUND // client: held -, available + (unused escrow returned)
+}
+
+enum NotificationType {
+  PROPOSAL_RECEIVED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  MILESTONE_SUBMITTED
+  MILESTONE_APPROVED
+  MILESTONE_REVISION_REQUESTED
+  PAYMENT_RECEIVED
+  PROJECT_EXPIRED
+}
+
+// ─────────────────────────── accounts ───────────────────────────
+
+model User {
+  id          Int      @id @default(autoincrement())
+  name        String
+  email       String   @unique
+  password    String
+  role        Role
+  isBanned    Boolean  @default(false)
+  // denormalized so profiles never recompute averages (sum / count)
+  ratingSum   Int      @default(0)
+  ratingCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profile             FreelancerProfile?
+  wallet              Wallet?
+  sessions            Session[]
+  projects            Project[]          @relation("ClientProjects")
+  proposals           Proposal[]
+  clientContracts     Contract[]         @relation("ClientContracts")
+  freelancerContracts Contract[]         @relation("FreelancerContracts")
+  reviewsWritten      Review[]           @relation("ReviewAuthor")
+  reviewsReceived     Review[]           @relation("ReviewTarget")
+  notifications       Notification[]
+
+  @@index([role, createdAt])
+}
+
+/// One row per logged-in device. The refresh token rotates; the session id stays.
+model Session {
+  id          String   @id @default(uuid())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshHash String
+  userAgent   String?
+  ip          String?
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([userId])
+}
+
+// ─────────────────────────── profile & skills ───────────────────────────
+
+model FreelancerProfile {
+  id                Int               @id @default(autoincrement())
+  userId            Int               @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title             String?
+  bio               String?
+  hourlyRate        Decimal?          @db.Decimal(10, 2)
+  avatarUrl         String?
+  cvUrl             String?
+  completedProjects Int               @default(0)
+  updatedAt         DateTime          @updatedAt
+  skills            FreelancerSkill[]
+}
+
+model Skill {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
+  freelancers FreelancerSkill[]
+}
+
+model FreelancerSkill {
+  profileId Int
+  profile   FreelancerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skillId   Int
+  skill     Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, skillId])
+  @@index([skillId])
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  projects Project[]
+}
+
+// ─────────────────────────── projects & proposals ───────────────────────────
+
+model Project {
+  id          Int           @id @default(autoincrement())
+  title       String
+  description String
+  budgetMin   Decimal       @db.Decimal(14, 2)
+  budgetMax   Decimal       @db.Decimal(14, 2)
+  /// last moment to receive proposals
+  deadline    DateTime
+  status      ProjectStatus @default(OPEN)
+  clientId    Int
+  client      User          @relation("ClientProjects", fields: [clientId], references: [id])
+  categoryId  Int
+  category    Category      @relation(fields: [categoryId], references: [id])
+  /// soft delete: hidden from the platform, kept in the database
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  attachments ProjectAttachment[]
+  proposals   Proposal[]
+  contract    Contract?
+
+  @@index([status, createdAt])
+  @@index([categoryId, status, createdAt])
+  @@index([budgetMax])
+  @@index([status, deadline])
+  @@index([clientId])
+  // fast ILIKE '%word%' search inside title / description (pg_trgm)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Project_title_trgm_idx")
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "Project_description_trgm_idx")
+}
+
+model ProjectAttachment {
+  id           Int      @id @default(autoincrement())
+  projectId    Int
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url          String
+  originalName String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model Proposal {
+  id           Int            @id @default(autoincrement())
+  projectId    Int
+  project      Project        @relation(fields: [projectId], references: [id])
+  freelancerId Int
+  freelancer   User           @relation(fields: [freelancerId], references: [id])
+  price        Decimal        @db.Decimal(14, 2)
+  durationDays Int
+  message      String
+  status       ProposalStatus @default(PENDING)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  contract     Contract?
+
+  // one proposal per freelancer per project, even on a double click
+  @@unique([projectId, freelancerId])
+  @@index([projectId, status, price])
+  @@index([freelancerId, createdAt])
+}
+
+// ─────────────────────────── contracts & milestones ───────────────────────────
+
+model Contract {
+  id            Int            @id @default(autoincrement())
+  projectId     Int            @unique // at most one contract per project
+  project       Project        @relation(fields: [projectId], references: [id])
+  proposalId    Int            @unique
+  proposal      Proposal       @relation(fields: [proposalId], references: [id])
+  clientId      Int
+  client        User           @relation("ClientContracts", fields: [clientId], references: [id])
+  freelancerId  Int
+  freelancer    User           @relation("FreelancerContracts", fields: [freelancerId], references: [id])
+  amount        Decimal        @db.Decimal(14, 2)
+  durationDays  Int
+  /// money of this contract still held in the client's wallet
+  escrowBalance Decimal        @db.Decimal(14, 2)
+  status        ContractStatus @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  completedAt   DateTime?
+
+  milestones   Milestone[]
+  reviews      Review[]
+  transactions Transaction[]
+
+  @@index([clientId])
+  @@index([freelancerId])
+}
+
+model Milestone {
+  id           Int             @id @default(autoincrement())
+  contractId   Int
+  contract     Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  position     Int
+  title        String
+  description  String?
+  amount       Decimal         @db.Decimal(14, 2)
+  status       MilestoneStatus @default(PENDING)
+  revisionNote String?
+  approvedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  submissions  Submission[]
+
+  @@index([contractId, position])
+}
+
+model Submission {
+  id          Int              @id @default(autoincrement())
+  milestoneId Int
+  milestone   Milestone        @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  note        String
+  createdAt   DateTime         @default(now())
+  files       SubmissionFile[]
+
+  @@index([milestoneId])
+}
+
+model SubmissionFile {
+  id           Int        @id @default(autoincrement())
+  submissionId Int
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  /// file name on disk in uploads/private (never served statically)
+  storedName   String
+  originalName String
+  mimeType     String
+  size         Int
+
+  @@index([submissionId])
+}
+
+// ─────────────────────────── money ───────────────────────────
+
+model Wallet {
+  id           Int           @id @default(autoincrement())
+  userId       Int           @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance      Decimal       @default(0) @db.Decimal(14, 2)
+  heldBalance  Decimal       @default(0) @db.Decimal(14, 2)
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          Int             @id @default(autoincrement())
+  walletId    Int
+  wallet      Wallet          @relation(fields: [walletId], references: [id])
+  type        TransactionType
+  amount      Decimal         @db.Decimal(14, 2)
+  contractId  Int?
+  contract    Contract?       @relation(fields: [contractId], references: [id])
+  milestoneId Int?
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([walletId, type, createdAt])
+  @@index([type, createdAt])
+}
+
+// ─────────────────────────── reviews & notifications ───────────────────────────
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  contract   Contract @relation(fields: [contractId], references: [id])
+  reviewerId Int
+  reviewer   User     @relation("ReviewAuthor", fields: [reviewerId], references: [id])
+  revieweeId Int
+  reviewee   User     @relation("ReviewTarget", fields: [revieweeId], references: [id])
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+
+  // each party reviews a contract once
+  @@unique([contractId, reviewerId])
+  @@index([revieweeId, createdAt])
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
